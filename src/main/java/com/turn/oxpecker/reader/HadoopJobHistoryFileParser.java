@@ -42,6 +42,7 @@ import org.threeten.bp.temporal.ChronoUnit;
  */
 public class HadoopJobHistoryFileParser {
 
+	static String dateDirectoryRegex = "/yyyy/MM/dd$";
 	static Logger LOGGER = Logger.getLogger(HadoopJobHistoryFileParser.class);
 	public static JobHistoryFileSystem jobHistoryFileSystem = new JobHistoryFileSystem();
 
@@ -74,13 +75,11 @@ public class HadoopJobHistoryFileParser {
 	 */
 	public static List<Collection<HadoopJob>> getHadoopJobsForDates(ZonedDateTime start, ZonedDateTime end, String baseJobHistDir, String jobTrackerName) throws IOException, URISyntaxException {
 		List<ZonedDateTime> listOfDates = getListOfDates(start, end);
-		List<String> dateDirectories = getListOfDirectories(baseJobHistDir, listOfDates);
+		List<File> dateDirectories = getListOfDirectories(baseJobHistDir, listOfDates);
 		List<Collection<HadoopJob>> allHadoopJobs = new LinkedList<Collection<HadoopJob>>();
-		for (String dateDirectory : dateDirectories) {
-			if (new File(dateDirectory).exists()) {
-				LOGGER.info(String.format("Reading date directory %s", dateDirectory));
-				allHadoopJobs.add(getHadoopJobsFromDirectory(dateDirectory, jobTrackerName));
-			}
+		for (File dateDirectory : dateDirectories) {
+			LOGGER.info(String.format("Reading date directory %s", dateDirectory));
+			allHadoopJobs.add(getHadoopJobsFromDirectory(dateDirectory, jobTrackerName));
 		}
 		LOGGER.info(String.format("Read %s dir(s) in total", allHadoopJobs.size()));
 		return allHadoopJobs;
@@ -113,18 +112,19 @@ public class HadoopJobHistoryFileParser {
 	 * @param listDates
 	 * @return
 	 */
-	public static List<String> getListOfDirectories(String baseDir, List<ZonedDateTime> listDates) {
-		ArrayList<String> listOfDir = new ArrayList<String>(listDates.size());
+	public static List<File> getListOfDirectories(String baseDir, List<ZonedDateTime> listDates) {
+		ArrayList<File> listOfDir = new ArrayList<File>(listDates.size());
 
 		Collection<File> dirs = jobHistoryFileSystem.getAllSubDirectories(new File(baseDir));
 
 		for (File dir : dirs) {
+			LOGGER.debug(dir.getAbsolutePath());
 			for (ZonedDateTime zdt : listDates) {
-				Pattern p = Pattern.compile(zdt.format(DateTimeFormatter.ofPattern("/yyyy/MM/dd")));
+				Pattern p = Pattern.compile(zdt.format(DateTimeFormatter.ofPattern(dateDirectoryRegex)));
 				Matcher m = p.matcher(dir.getAbsolutePath());
 				boolean found = m.find();
 				if (found) {
-					listOfDir.add(dir.getAbsolutePath());
+					listOfDir.add(dir);
 				}
 			}
 		}
@@ -139,16 +139,15 @@ public class HadoopJobHistoryFileParser {
 	 * @throws URISyntaxException
 	 * @throws IOException
 	 */
-	public static Collection<HadoopJob> getHadoopJobsFromDirectory(String dateDirectory, String jobtrackerName) throws URISyntaxException, IOException {
+	public static Collection<HadoopJob> getHadoopJobsFromDirectory(File dateDirectory, String jobtrackerName) throws URISyntaxException, IOException {
 		LOGGER.info(String.format("Getting hadoop jobs from %s", dateDirectory));
-		File jobHistDirFile = new File(dateDirectory);
-		Collection<String> jobIds = getJobIdsFromDirectory(jobHistDirFile);
+		Collection<String> jobIds = getJobIdsFromDirectory(dateDirectory);
 
 		Configuration conf = new Configuration();
-		FileSystem fs = FileSystem.get( new URI(dateDirectory), conf);
+		FileSystem fs = FileSystem.get( new URI(dateDirectory.getAbsolutePath()), conf);
 		LocalFileSystem localFileSystem = fs.getLocal(conf);
 
-		Collection<HadoopJob> hadoopJobs = getHadoopJobsGivenJobIDList(localFileSystem, jobHistDirFile, jobtrackerName, jobIds);
+		Collection<HadoopJob> hadoopJobs = getHadoopJobsGivenJobIDList(localFileSystem, dateDirectory, jobtrackerName, jobIds);
 		LOGGER.info(String.format("Size from %s : %s", dateDirectory, hadoopJobs.size()));
 		return hadoopJobs;
 	}
@@ -382,13 +381,11 @@ public class HadoopJobHistoryFileParser {
 
 	public static List<HashSet<String>> getHadoopJobIdsForDates(ZonedDateTime start, ZonedDateTime end, String baseJobHistDir) {
 		List<ZonedDateTime> listOfDates = getListOfDates(start, end);
-		List<String> dateDirectories = getListOfDirectories(baseJobHistDir, listOfDates);
+		List<File> dateDirectories = getListOfDirectories(baseJobHistDir, listOfDates);
 		List<HashSet<String>> allJobIds = new LinkedList<HashSet<String>>();
-		for (String dateDirectory : dateDirectories) {
-			if (new File(dateDirectory).exists()) {
-				LOGGER.info(String.format("Reading date directory %s", dateDirectory));
-				allJobIds.add(getJobIdsFromDirectory(new File(dateDirectory)));
-			}
+		for (File dateDirectory : dateDirectories) {
+			LOGGER.info(String.format("Reading date directory %s", dateDirectory));
+			allJobIds.add(getJobIdsFromDirectory(dateDirectory));
 		}
 		LOGGER.info(String.format("Read %s dir(s) in total", allJobIds.size()));
 		return allJobIds;
@@ -402,13 +399,13 @@ public class HadoopJobHistoryFileParser {
 	 * @throws URISyntaxException
 	 * @throws IOException
 	 */
-	public static HadoopJob getHadoopJobFromDirectoryGivenJobID(String dateDirectory, String jobtrackerName, String jobId) throws URISyntaxException, IOException {
+	public static HadoopJob getHadoopJobFromDirectoryGivenJobID(File dateDirectory, String jobtrackerName, String jobId) throws URISyntaxException, IOException {
 
 		Configuration conf = new Configuration();
-		FileSystem fs = FileSystem.get( new URI(dateDirectory), conf);
+		FileSystem fs = FileSystem.get( new URI(dateDirectory.getAbsolutePath()), conf);
 		LocalFileSystem localFileSystem = fs.getLocal(conf);
 
-		HadoopJob hadoopJob = getHadoopJobGivenJobID(localFileSystem, new File(dateDirectory), jobtrackerName, jobId);
+		HadoopJob hadoopJob = getHadoopJobGivenJobID(localFileSystem, dateDirectory, jobtrackerName, jobId);
 		return hadoopJob;
 	}
 

@@ -37,14 +37,6 @@ public class HadoopJobHistoryFileParserTest {
 	}
 
 	@Test
-	public static void getJobIdsFromDirectoryTest() {
-
-		File f = new File("/Users/jshum/turn/jtk_job_history_files");
-		HadoopJobHistoryFileParser.getJobIdsFromDirectory(f);
-
-	}
-
-	@Test
 	public static void testGetListOfDirectories() {
 
 		JobHistoryFileSystem jhfs = Mockito.mock(JobHistoryFileSystem.class);
@@ -62,10 +54,12 @@ public class HadoopJobHistoryFileParserTest {
 				"/Users/jshum/turn/jtk_job_history_files/jt001.sjc2.turn.com_1431571050810_/2015",
 				"/Users/jshum/turn/jtk_job_history_files/jt001.sjc2.turn.com_1431571050810_/2015/06",
 				"/Users/jshum/turn/jtk_job_history_files/jt001.sjc2.turn.com_1431571050810_/2015/06/01",
+				"/Users/jshum/turn/jtk_job_history_files/jt001.sjc2.turn.com_1431571050810_/2015/06/01/00040",
 				"/Users/jshum/turn/jtk_job_history_files/jt001.sjc2.turn.com_1432171645801_",
 				"/Users/jshum/turn/jtk_job_history_files/jt001.sjc2.turn.com_1432171645801_/2015",
 				"/Users/jshum/turn/jtk_job_history_files/jt001.sjc2.turn.com_1432171645801_/2015/06",
-				"/Users/jshum/turn/jtk_job_history_files/jt001.sjc2.turn.com_1432171645801_/2015/06/01"
+				"/Users/jshum/turn/jtk_job_history_files/jt001.sjc2.turn.com_1432171645801_/2015/06/01",
+				"/Users/jshum/turn/jtk_job_history_files/jt001.sjc2.turn.com_1431571050810_/2015/06/01/00039",
 		};
 		for (String s : dirPaths) {
 			dirs.add(new File(s));
@@ -74,11 +68,11 @@ public class HadoopJobHistoryFileParserTest {
 
 		ZonedDateTime june1 = ZonedDateTime.of(2015,6,1,0,0,0,0, ZoneId.of("America/Los_Angeles"));
 		ZonedDateTime[] dates = {june1};
-		List<String> subDirsOfDate = HadoopJobHistoryFileParser.getListOfDirectories("/Users/jshum/turn/jtk_job_history_files/", Arrays.asList(dates));
+		List<File> subDirsOfDate = HadoopJobHistoryFileParser.getListOfDirectories("/Users/jshum/turn/jtk_job_history_files/", Arrays.asList(dates));
 		Assert.assertEquals(subDirsOfDate.size(),2);
 		Collections.sort(subDirsOfDate);
-		Assert.assertEquals(subDirsOfDate.get(0),"/Users/jshum/turn/jtk_job_history_files/jt001.sjc2.turn.com_1431571050810_/2015/06/01");
-		Assert.assertEquals(subDirsOfDate.get(1),"/Users/jshum/turn/jtk_job_history_files/jt001.sjc2.turn.com_1432171645801_/2015/06/01");
+		Assert.assertEquals(subDirsOfDate.get(0).getAbsolutePath(),"/Users/jshum/turn/jtk_job_history_files/jt001.sjc2.turn.com_1431571050810_/2015/06/01");
+		Assert.assertEquals(subDirsOfDate.get(1).getAbsolutePath(),"/Users/jshum/turn/jtk_job_history_files/jt001.sjc2.turn.com_1432171645801_/2015/06/01");
 	}
 
 
