@@ -1,12 +1,11 @@
-Oxpecker is a library that can be used to read Hadoop job stats files and Hadoop job config files.
 
-Entry points for this method
+Built by [Turn](http://turn.com)
 
-```
-getHadoopJobsForDates(start, end, jobHistDir, jobTrackerName);
-```
+###Overview###
 
-Example usage :
+Oxpecker is a Java library to read Hadoop job stats files and Hadoop job config files produced by the jobtracker.
+
+###Example usage###
 
 ```
 DateTimeFormatter df = DateTimeFormatter.ISO_DATE; //YYYY-MM-DD
@@ -17,6 +16,12 @@ String jobTrackerName = "HADOOPCLUSTER";
 String jobHistDir = "/path/to/job/history/files";
 List<Collection<HadoopJob>> l = getHadoopJobsForDates(start, end, jobHistDir, jobTrackerName);
 ```
+
+###Contributors###
+
+* [Jason Shum](https://github.com/jshum)
+
+###License###
 
 
 

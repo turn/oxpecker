@@ -1,3 +1,18 @@
+/**
+ * Copyright (C) 2015 Turn Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *    	http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
 package com.turn.oxpecker.reader;
 
 import com.turn.oxpecker.instrumentation.HadoopJob;
@@ -42,7 +57,7 @@ import org.threeten.bp.temporal.ChronoUnit;
  */
 public class HadoopJobHistoryFileParser {
 
-	static String dateDirectoryRegex = "/yyyy/MM/dd$";
+	private static final String dateDirectoryRegex = "/yyyy/MM/dd$";
 	static Logger LOGGER = Logger.getLogger(HadoopJobHistoryFileParser.class);
 	public static JobHistoryFileSystem jobHistoryFileSystem = new JobHistoryFileSystem();
 
@@ -144,8 +159,7 @@ public class HadoopJobHistoryFileParser {
 		Collection<String> jobIds = getJobIdsFromDirectory(dateDirectory);
 
 		Configuration conf = new Configuration();
-		FileSystem fs = FileSystem.get( new URI(dateDirectory.getAbsolutePath()), conf);
-		LocalFileSystem localFileSystem = fs.getLocal(conf);
+		LocalFileSystem localFileSystem = FileSystem.getLocal(conf);
 
 		Collection<HadoopJob> hadoopJobs = getHadoopJobsGivenJobIDList(localFileSystem, dateDirectory, jobtrackerName, jobIds);
 		LOGGER.info(String.format("Size from %s : %s", dateDirectory, hadoopJobs.size()));
@@ -182,6 +196,11 @@ public class HadoopJobHistoryFileParser {
 		return confFileStrings;
 	}
 
+	/**
+	 * Utility method to get JobId from configuration file name
+	 * @param confFileString
+	 * @return
+	 */
 	public static String getJobIdFromConfFileName(String confFileString) {
 		Pattern p = Pattern.compile("^(.*)_conf.xml");
 		Matcher m = p.matcher(confFileString);
@@ -190,9 +209,14 @@ public class HadoopJobHistoryFileParser {
 		return jobIdString;
 	}
 
-	public static String getJobIdFromStatsFileName(String stasFileName) {
-		int index = StringUtils.ordinalIndexOf(stasFileName, "_", 3);
-		return stasFileName.substring(0,index);
+	/**
+	 * Utility method to get JobId from statistics file name
+	 * @param statsFileName
+	 * @return
+	 */
+	public static String getJobIdFromStatsFileName(String statsFileName) {
+		int index = StringUtils.ordinalIndexOf(statsFileName, "_", 3);
+		return statsFileName.substring(0,index);
 	}
 
 	/**
@@ -257,31 +281,31 @@ public class HadoopJobHistoryFileParser {
 			LOGGER.warn(String.format("One of conf file or statistics file is missing, skipping file : %s", jobId));
 			return null;
 		}
-		TaskAttemptFilter nf = new TaskAttemptFilter();
+		TaskAttemptFilter hadoopJobKeyValueMapWrapper = new TaskAttemptFilter();
 		try {
-			getHadoopJobFromStatsFile(fs, statsFile.getAbsolutePath(), nf);
+			getHadoopJobFromStatsFile(fs, statsFile.getAbsolutePath(), hadoopJobKeyValueMapWrapper);
 		} catch (IOException e) {
-			LOGGER.error("Error",e);
+			LOGGER.error(String.format("Error for jobid : %s",jobId),e);
 			return null;
 		}
 		HadoopJob hj = new HadoopJob();
 
 		try {
-			populateFieldsFromJobInfo(nf,hj);
+			populateFieldsFromJobInfo(hadoopJobKeyValueMapWrapper,hj);
 			hj.addField(Constant.JOB_TRACKER, jobTrackerName);
-			populateCountersFromJobInfo(nf, hj);
+			populateCountersFromJobInfo(hadoopJobKeyValueMapWrapper, hj);
 			populateConfigsFromFile(hj, confFile);
 		} catch (FileNotFoundException e) {
-			LOGGER.error("Error", e);
+			LOGGER.error(String.format("Error for jobid : %s",jobId),e);
 			return null;
 		} catch (DocumentException e) {
-			LOGGER.error("Error", e);
+			LOGGER.error(String.format("Error for jobid : %s",jobId),e);
 			return null;
 		} catch (HadoopJobParseException e) {
-			LOGGER.error("Error", e);
+			LOGGER.error(String.format("Error for jobid : %s",jobId),e);
 			return null;
 		} catch (ParseException e) {
-			LOGGER.error("Error", e);
+			LOGGER.error(String.format("Error for jobid : %s",jobId),e);
 			return null;
 		}
 		return hj;
@@ -329,17 +353,23 @@ public class HadoopJobHistoryFileParser {
 	 * @throws HadoopJobParseException
 	 */
 	public static void populateConfigsFromFile(HadoopJob hj, File confFile) throws FileNotFoundException, DocumentException, HadoopJobParseException {
-		HadoopJobConfigFileParser configParser = new HadoopJobConfigFileParser(confFile.getAbsolutePath());
+		String confFilePath = confFile.getAbsolutePath();
+		if (confFilePath == null) {
+			throw new FileNotFoundException("Samburu : getAboslutePath() returned null");
+		}
+		HadoopJobConfigFileParser configParser = new HadoopJobConfigFileParser(confFilePath);
 		configParser.addJobConfToHadoopJob(hj);
 	}
 
 	/**
-	 * Given a hadoopjob and Hadoop object, add all the whitelisted fields into the HadoopJob object
-	 * @param nf
+	 * Given an object that contains all the key value pairs parsed from
+	 * the statistics files, add all the whitelisted fields into
+	 * oxpecker's HadoopJob object
+	 * @param hadoopJobKeyValueMapWrapper
 	 * @param hadoopJob
 	 */
-	public static void populateFieldsFromJobInfo(TaskAttemptFilter nf, HadoopJob hadoopJob) {
-		Map<JobHistory.Keys, String> maps = nf.getValues();
+	public static void populateFieldsFromJobInfo(TaskAttemptFilter hadoopJobKeyValueMapWrapper, HadoopJob hadoopJob) {
+		Map<JobHistory.Keys, String> maps = hadoopJobKeyValueMapWrapper.getValues();
 		JobHistory.Keys[] keys = {
 			JobHistory.Keys.JOBID, JobHistory.Keys.JOBNAME,
 			JobHistory.Keys.LAUNCH_TIME, JobHistory.Keys.SUBMIT_TIME,
@@ -360,13 +390,15 @@ public class HadoopJobHistoryFileParser {
 	}
 
 	/**
-	 * Given a Hadoop object and hadoopJob object, add all the counters to the hadoopJob object
-	 * @param jobInfo
+	 * Given an object that contains all the key value pairs parsed from
+	 * the statistics files, add all the whitelisted fields into
+	 * oxpecker's HadoopJob object
+	 * @param hadoopJobKeyValueMapWrapper
 	 * @param hadoopJob
 	 * @throws ParseException
 	 */
-	public static void populateCountersFromJobInfo(TaskAttemptFilter jobInfo, HadoopJob hadoopJob) throws ParseException {
-		Map<JobHistory.Keys, String> maps = jobInfo.getValues();
+	public static void populateCountersFromJobInfo(TaskAttemptFilter hadoopJobKeyValueMapWrapper, HadoopJob hadoopJob) throws ParseException {
+		Map<JobHistory.Keys, String> maps = hadoopJobKeyValueMapWrapper.getValues();
 
 		Counters totalCounters =
 				Counters.fromEscapedCompactString(maps.get(JobHistory.Keys.COUNTERS));
@@ -379,10 +411,10 @@ public class HadoopJobHistoryFileParser {
 		}
 	}
 
-	public static List<HashSet<String>> getHadoopJobIdsForDates(ZonedDateTime start, ZonedDateTime end, String baseJobHistDir) {
+	public static List<Collection<String>> getHadoopJobIdsForDates(ZonedDateTime start, ZonedDateTime end, String baseJobHistDir) {
 		List<ZonedDateTime> listOfDates = getListOfDates(start, end);
 		List<File> dateDirectories = getListOfDirectories(baseJobHistDir, listOfDates);
-		List<HashSet<String>> allJobIds = new LinkedList<HashSet<String>>();
+		List<Collection<String>> allJobIds = new LinkedList<Collection<String>>();
 		for (File dateDirectory : dateDirectories) {
 			LOGGER.info(String.format("Reading date directory %s", dateDirectory));
 			allJobIds.add(getJobIdsFromDirectory(dateDirectory));
@@ -402,37 +434,10 @@ public class HadoopJobHistoryFileParser {
 	public static HadoopJob getHadoopJobFromDirectoryGivenJobID(File dateDirectory, String jobtrackerName, String jobId) throws URISyntaxException, IOException {
 
 		Configuration conf = new Configuration();
-		FileSystem fs = FileSystem.get( new URI(dateDirectory.getAbsolutePath()), conf);
-		LocalFileSystem localFileSystem = fs.getLocal(conf);
+		LocalFileSystem localFileSystem = FileSystem.getLocal(conf);
 
 		HadoopJob hadoopJob = getHadoopJobGivenJobID(localFileSystem, dateDirectory, jobtrackerName, jobId);
 		return hadoopJob;
-	}
-
-	public static void main(String[] args) throws IOException, URISyntaxException {
-
-		if (args.length != 4) {
-			System.out.println("usage : HadoopJobHistoryFileParser " +
-					"<start date YYYY-MM-DD> <end date YYYY-MM-DD> " +
-					"<jobtrackerName> <path to top level directory containing files>");
-			return;
-		}
-
-		DateTimeFormatter df = DateTimeFormatter.ISO_DATE;
-		LocalTime midnight = LocalTime.of(0, 0); //midnight
-
-		ZonedDateTime start = ZonedDateTime.of(LocalDate.parse(args[0], df), midnight, ZoneId.systemDefault());
-		ZonedDateTime end = ZonedDateTime.of(LocalDate.parse(args[1], df), midnight, ZoneId.systemDefault());
-
-		String jobTrackerName = args[2];
-		String jobHistDir = args[3];
-
-		LOGGER.info(String.format("Parsed %s %s %s %s", start, end, jobHistDir, jobTrackerName));
-
-//		String jobHistDir = "/Users/jshum/turn/jtk_job_history_files";
-//		String jobTrackerName = "ATL2";
-
-		List<Collection<HadoopJob>> l = getHadoopJobsForDates(start, end, jobHistDir, jobTrackerName);
 	}
 
 }
